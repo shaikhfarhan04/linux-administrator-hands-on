@@ -1,0 +1,1921 @@
+# 🐧 Linux Administrator Project — Phase 3
+
+# Users, Groups & Account Administration
+
+This phase is extremely important for a **Linux System Administrator** because managing users, groups, access, passwords, service accounts, and sudo privileges is a daily administrative task.
+
+We'll continue using the server from Phases 1 and 2:
+
+```text
+Server:       admin01
+OS:           Amazon Linux 2023
+Admin user:   adminuser
+Project path: /opt/linux-admin
+```
+
+---
+
+# 1. Phase 3 Objectives
+
+By the end of this phase, you will know how to:
+
+* Create users
+* Delete users
+* Modify users
+* Create groups
+* Delete groups
+* Add/remove users from groups
+* Understand UID/GID
+* Understand `/etc/passwd`
+* Understand `/etc/shadow`
+* Understand `/etc/group`
+* Configure passwords
+* Configure password expiration
+* Lock/unlock accounts
+* Create service accounts
+* Configure sudo access
+* Switch users
+* Troubleshoot login problems
+* Troubleshoot permission/access problems
+* Audit user activity
+
+---
+
+# 2. Connect to `admin01`
+
+From PowerShell:
+
+```powershell
+ssh -i .\linux-admin.pem adminuser@YOUR_PUBLIC_IP
+```
+
+Verify:
+
+```bash
+whoami
+hostname
+```
+
+Expected:
+
+```text
+adminuser
+admin01
+```
+
+---
+
+# 3. Check Existing Users
+
+Linux stores local user information primarily in:
+
+```text
+/etc/passwd
+```
+
+Run:
+
+```bash
+cat /etc/passwd
+```
+
+You'll see entries similar to:
+
+```text
+root:x:0:0:root:/root:/bin/bash
+ec2-user:x:1000:1000:EC2 Default User:/home/ec2-user:/bin/bash
+adminuser:x:1001:1001::/home/adminuser:/bin/bash
+```
+
+---
+
+# 4. Understand `/etc/passwd`
+
+A line looks like:
+
+```text
+adminuser:x:1001:1001::/home/adminuser:/bin/bash
+```
+
+The fields are:
+
+```text
+1       2   3    4    5    6                 7
+│       │   │    │    │    │                 │
+User    │   UID  GID  Info Home              Shell
+        │
+        Password placeholder
+```
+
+So:
+
+```text
+username     = adminuser
+UID          = 1001
+GID          = 1001
+home         = /home/adminuser
+shell        = /bin/bash
+```
+
+---
+
+# 5. Find a Specific User
+
+Instead of reading the entire file:
+
+```bash
+grep adminuser /etc/passwd
+```
+
+Check `ec2-user`:
+
+```bash
+grep ec2-user /etc/passwd
+```
+
+Check root:
+
+```bash
+grep '^root:' /etc/passwd
+```
+
+---
+
+# 6. `id` Command
+
+Run:
+
+```bash
+id
+```
+
+For another user:
+
+```bash
+id adminuser
+```
+
+Example:
+
+```text
+uid=1001(adminuser) gid=1001(adminuser) groups=1001(adminuser),10(wheel)
+```
+
+This tells you:
+
+* UID
+* Primary GID
+* Supplementary groups
+
+---
+
+# 7. `whoami`
+
+```bash
+whoami
+```
+
+This tells you the **current effective username**.
+
+Compare:
+
+```bash
+whoami
+id
+```
+
+---
+
+# 8. `groups`
+
+Check your groups:
+
+```bash
+groups
+```
+
+Check another user:
+
+```bash
+groups adminuser
+```
+
+Example:
+
+```text
+adminuser : adminuser wheel
+```
+
+---
+
+# 9. Create Your Lab Groups
+
+We're going to simulate a company.
+
+Create:
+
+```text
+developers
+operations
+database
+security
+```
+
+Commands:
+
+```bash
+sudo groupadd developers
+sudo groupadd operations
+sudo groupadd database
+sudo groupadd security
+```
+
+Verify:
+
+```bash
+getent group developers
+getent group operations
+getent group database
+getent group security
+```
+
+---
+
+# 10. Understand `/etc/group`
+
+Run:
+
+```bash
+cat /etc/group
+```
+
+Or:
+
+```bash
+grep -E 'developers|operations|database|security' /etc/group
+```
+
+Example:
+
+```text
+developers:x:1002:
+operations:x:1003:
+database:x:1004:
+security:x:1005:
+```
+
+Structure:
+
+```text
+groupname : password : GID : members
+```
+
+---
+
+# 11. Create Users
+
+Let's create employees.
+
+```bash
+sudo useradd -m developer1
+sudo useradd -m developer2
+sudo useradd -m operator1
+sudo useradd -m dbadmin
+sudo useradd -m securityadmin
+```
+
+Verify:
+
+```bash
+id developer1
+id developer2
+id operator1
+id dbadmin
+id securityadmin
+```
+
+---
+
+# 12. Check Home Directories
+
+Run:
+
+```bash
+ls -la /home
+```
+
+You should see:
+
+```text
+adminuser
+developer1
+developer2
+operator1
+dbadmin
+securityadmin
+```
+
+Check one:
+
+```bash
+ls -la /home/developer1
+```
+
+---
+
+# 13. User Creation with Specific Shell
+
+Create:
+
+```bash
+sudo useradd -m -s /bin/bash developer3
+```
+
+Check:
+
+```bash
+grep developer3 /etc/passwd
+```
+
+---
+
+# 14. Create a Service Account
+
+In production, applications often use dedicated service accounts rather than personal users.
+
+Create:
+
+```bash
+sudo useradd -r -s /sbin/nologin appsvc
+```
+
+Check:
+
+```bash
+id appsvc
+```
+
+And:
+
+```bash
+grep appsvc /etc/passwd
+```
+
+You'll see a shell such as:
+
+```text
+/sbin/nologin
+```
+
+This means the account isn't intended for interactive login.
+
+### Why?
+
+If an application runs as:
+
+```text
+root
+```
+
+and the application is compromised, the attacker may gain root-level access.
+
+Instead:
+
+```text
+nginx
+  ↓
+nginx user
+
+application
+  ↓
+appsvc user
+```
+
+This follows the **principle of least privilege**.
+
+---
+
+# 15. Set Passwords
+
+Set a password for `developer1`:
+
+```bash
+sudo passwd developer1
+```
+
+Do the same:
+
+```bash
+sudo passwd developer2
+sudo passwd operator1
+sudo passwd dbadmin
+sudo passwd securityadmin
+```
+
+Don't set a password for `appsvc` because it is a service account.
+
+---
+
+# 16. Add Users to Groups
+
+Developer team:
+
+```bash
+sudo usermod -aG developers developer1
+sudo usermod -aG developers developer2
+```
+
+Operations:
+
+```bash
+sudo usermod -aG operations operator1
+```
+
+Database:
+
+```bash
+sudo usermod -aG database dbadmin
+```
+
+Security:
+
+```bash
+sudo usermod -aG security securityadmin
+```
+
+Verify:
+
+```bash
+id developer1
+id developer2
+id operator1
+id dbadmin
+id securityadmin
+```
+
+---
+
+# 17. Important `usermod` Rule
+
+When adding a supplementary group, use:
+
+```bash
+usermod -aG group username
+```
+
+For example:
+
+```bash
+sudo usermod -aG developers developer1
+```
+
+### Why `-aG`?
+
+```text
+-a = append
+-G = supplementary groups
+```
+
+Be careful with:
+
+```bash
+usermod -G developers developer1
+```
+
+Without `-a`, you can replace the user's existing supplementary group membership.
+
+---
+
+# 18. Multiple Groups
+
+Suppose `developer1` needs:
+
+```text
+developers
+operations
+```
+
+Run:
+
+```bash
+sudo usermod -aG developers,operations developer1
+```
+
+Verify:
+
+```bash
+groups developer1
+```
+
+---
+
+# 19. Remove a User from a Group
+
+Amazon Linux uses standard Linux tools; `gpasswd` is convenient:
+
+```bash
+sudo gpasswd -d developer1 operations
+```
+
+Check:
+
+```bash
+groups developer1
+```
+
+---
+
+# 20. Change Primary Group
+
+You can change the user's primary group:
+
+```bash
+sudo usermod -g developers developer1
+```
+
+Check:
+
+```bash
+id developer1
+```
+
+You'll see:
+
+```text
+gid=... (developers)
+```
+
+---
+
+# 21. Create a Group with a Specific GID
+
+Normally Linux automatically assigns a GID.
+
+You can specify one:
+
+```bash
+sudo groupadd -g 2000 projectteam
+```
+
+Check:
+
+```bash
+getent group projectteam
+```
+
+---
+
+# 22. Create a User with Specific UID
+
+For lab purposes:
+
+```bash
+sudo useradd -m -u 2000 testuser
+```
+
+Check:
+
+```bash
+id testuser
+```
+
+Expected UID:
+
+```text
+2000
+```
+
+### Why can specific UIDs matter?
+
+In environments using shared storage such as NFS, matching UID/GID values between servers can be important.
+
+---
+
+# 23. User Information
+
+Linux provides:
+
+```bash
+getent passwd username
+```
+
+Example:
+
+```bash
+getent passwd developer1
+```
+
+For groups:
+
+```bash
+getent group developers
+```
+
+This is often preferable to directly reading `/etc/passwd` because `getent` can also work with configured identity sources such as LDAP/SSSD.
+
+---
+
+# 24. Switch Users
+
+From `adminuser`:
+
+```bash
+su - developer1
+```
+
+Check:
+
+```bash
+whoami
+pwd
+id
+```
+
+You should see:
+
+```text
+developer1
+/home/developer1
+```
+
+Return:
+
+```bash
+exit
+```
+
+---
+
+# 25. Difference Between `su` and `sudo`
+
+### `su`
+
+Switch user:
+
+```bash
+su - developer1
+```
+
+### `sudo`
+
+Execute a command with elevated privileges:
+
+```bash
+sudo systemctl status nginx
+```
+
+You don't necessarily become root.
+
+Check:
+
+```bash
+sudo whoami
+```
+
+Output:
+
+```text
+root
+```
+
+---
+
+# 26. Test Group Membership
+
+Switch to:
+
+```bash
+su - developer1
+```
+
+Check:
+
+```bash
+groups
+```
+
+You should see the `developers` group.
+
+Exit:
+
+```bash
+exit
+```
+
+---
+
+# 27. Group Membership Refresh
+
+If a user is already logged in and you add them to a group, their existing shell may not immediately reflect the new supplementary group.
+
+You can:
+
+1. Log out and log back in, or
+2. Start a new login shell.
+
+Example:
+
+```bash
+su - developer1
+```
+
+Then:
+
+```bash
+groups
+```
+
+This is a common interview question.
+
+---
+
+# 28. User Account Locking
+
+Lock:
+
+```bash
+sudo passwd -l developer1
+```
+
+Check:
+
+```bash
+sudo passwd -S developer1
+```
+
+Unlock:
+
+```bash
+sudo passwd -u developer1
+```
+
+Check again:
+
+```bash
+sudo passwd -S developer1
+```
+
+---
+
+# 29. `usermod` Locking
+
+Another method:
+
+```bash
+sudo usermod -L developer1
+```
+
+Unlock:
+
+```bash
+sudo usermod -U developer1
+```
+
+---
+
+# 30. Account Expiration
+
+Check:
+
+```bash
+sudo chage -l developer1
+```
+
+You'll see password/account aging information.
+
+Set account expiration:
+
+```bash
+sudo chage -E 2026-12-31 developer1
+```
+
+Check:
+
+```bash
+sudo chage -l developer1
+```
+
+---
+
+# 31. Password Expiration
+
+Force password change on next login:
+
+```bash
+sudo chage -d 0 developer1
+```
+
+Check:
+
+```bash
+sudo chage -l developer1
+```
+
+Set maximum password age:
+
+```bash
+sudo chage -M 90 developer1
+```
+
+Minimum age:
+
+```bash
+sudo chage -m 1 developer1
+```
+
+Warning period:
+
+```bash
+sudo chage -W 7 developer1
+```
+
+---
+
+# 32. Understanding Password Aging
+
+Example:
+
+```text
+Maximum password age: 90 days
+Minimum password age: 1 day
+Warning period: 7 days
+```
+
+This means:
+
+```text
+Password changed
+       |
+       +---- 83 days
+       |
+       +---- warning begins
+       |
+       +---- 90 days
+       |
+       +---- password expires
+```
+
+---
+
+# 33. Check Password Status
+
+```bash
+sudo passwd -S developer1
+```
+
+Possible information includes whether the password is:
+
+```text
+active
+locked
+```
+
+---
+
+# 34. Delete a User
+
+**Don't delete our main `adminuser`.**
+
+Create a temporary user:
+
+```bash
+sudo useradd -m tempuser
+```
+
+Delete:
+
+```bash
+sudo userdel tempuser
+```
+
+Check:
+
+```bash
+id tempuser
+```
+
+Expected:
+
+```text
+no such user
+```
+
+---
+
+# 35. Delete User + Home Directory
+
+Create:
+
+```bash
+sudo useradd -m tempuser2
+```
+
+Delete:
+
+```bash
+sudo userdel -r tempuser2
+```
+
+The `-r` removes the user's home directory and mail spool where applicable.
+
+Verify:
+
+```bash
+ls /home
+```
+
+---
+
+# 36. Important Safety Rule
+
+Never casually run:
+
+```bash
+userdel -r root
+```
+
+or delete system/service users without understanding what uses them.
+
+Production systems often depend on service accounts.
+
+---
+
+# 37. Sudo Administration
+
+Check whether `adminuser` has sudo:
+
+```bash
+sudo -l
+```
+
+You'll likely see permissions based on the `wheel` group.
+
+Check:
+
+```bash
+getent group wheel
+```
+
+---
+
+# 38. Understand `/etc/sudoers`
+
+View safely:
+
+```bash
+sudo cat /etc/sudoers
+```
+
+**Do not edit `/etc/sudoers` directly with nano/vim.**
+
+Use:
+
+```bash
+sudo visudo
+```
+
+Why?
+
+`visudo` checks syntax before saving and helps prevent locking administrators out of sudo because of a syntax mistake.
+
+---
+
+# 39. Create a Dedicated Sudoers File
+
+Best practice is usually to put custom rules in:
+
+```text
+/etc/sudoers.d/
+```
+
+Create:
+
+```bash
+sudo visudo -f /etc/sudoers.d/linux-admin
+```
+
+For example:
+
+```text
+developer1 ALL=(ALL) /usr/bin/systemctl status nginx
+```
+
+This would allow `developer1` to run only that specific command through sudo.
+
+Test:
+
+```bash
+sudo -l -U developer1
+```
+
+---
+
+# 40. Least Privilege Exercise
+
+Create a support user:
+
+```bash
+sudo useradd -m support1
+sudo passwd support1
+```
+
+We want:
+
+```text
+support1
+   |
+   +---- Can check nginx status
+   |
+   +---- Cannot stop nginx
+   |
+   +---- Cannot become root
+```
+
+Create:
+
+```bash
+sudo visudo -f /etc/sudoers.d/support1
+```
+
+Add:
+
+```text
+support1 ALL=(root) /usr/bin/systemctl status nginx
+```
+
+Then:
+
+```bash
+sudo -l -U support1
+```
+
+This is a very good **Linux Administrator interview scenario**.
+
+---
+
+# 41. User Environment
+
+Switch:
+
+```bash
+su - developer1
+```
+
+Check environment:
+
+```bash
+env
+```
+
+Check:
+
+```bash
+echo $HOME
+echo $USER
+echo $SHELL
+echo $PATH
+```
+
+Expected examples:
+
+```text
+HOME=/home/developer1
+USER=developer1
+SHELL=/bin/bash
+```
+
+Exit:
+
+```bash
+exit
+```
+
+---
+
+# 42. Login Shell
+
+Check:
+
+```bash
+grep developer1 /etc/passwd
+```
+
+Example:
+
+```text
+developer1:x:1002:1002::/home/developer1:/bin/bash
+```
+
+The last field is the login shell.
+
+---
+
+# 43. Disable Interactive Login
+
+For service accounts:
+
+```bash
+sudo usermod -s /sbin/nologin appsvc
+```
+
+Check:
+
+```bash
+grep appsvc /etc/passwd
+```
+
+---
+
+# 44. Test Service Account
+
+Try:
+
+```bash
+su - appsvc
+```
+
+You should not get a normal interactive shell.
+
+This is intentional.
+
+---
+
+# 45. User Activity
+
+Check currently logged-in users:
+
+```bash
+who
+```
+
+More information:
+
+```bash
+w
+```
+
+Last logins:
+
+```bash
+last
+```
+
+Last login for users:
+
+```bash
+lastlog
+```
+
+---
+
+# 46. Troubleshooting Scenario 1 — User Cannot Login
+
+Imagine:
+
+> Developer reports: "My Linux account isn't working."
+
+Start:
+
+```bash
+id developer1
+```
+
+Then:
+
+```bash
+sudo passwd -S developer1
+```
+
+Check expiration:
+
+```bash
+sudo chage -l developer1
+```
+
+Check shell:
+
+```bash
+getent passwd developer1
+```
+
+Look for:
+
+```text
+/sbin/nologin
+```
+
+or:
+
+```text
+/bin/false
+```
+
+Also check whether the account is locked.
+
+---
+
+# 47. Troubleshooting Scenario 2 — User Can't Access Directory
+
+Suppose:
+
+```text
+developer1
+```
+
+cannot access:
+
+```text
+/opt/linux-admin/phase2
+```
+
+Investigate:
+
+### Step 1
+
+```bash
+ls -ld /opt
+```
+
+### Step 2
+
+```bash
+ls -ld /opt/linux-admin
+```
+
+### Step 3
+
+```bash
+ls -ld /opt/linux-admin/phase2
+```
+
+### Step 4
+
+```bash
+id developer1
+```
+
+### Step 5
+
+```bash
+namei -l /opt/linux-admin/phase2
+```
+
+`namei` is particularly useful because it lets you inspect permissions along the entire path.
+
+---
+
+# 48. Troubleshooting Scenario 3 — User Not in Expected Group
+
+Run:
+
+```bash
+id developer1
+```
+
+Then:
+
+```bash
+groups developer1
+```
+
+Check group definition:
+
+```bash
+getent group developers
+```
+
+If missing:
+
+```bash
+sudo usermod -aG developers developer1
+```
+
+Then start a new login session:
+
+```bash
+su - developer1
+```
+
+Verify:
+
+```bash
+groups
+```
+
+---
+
+# 49. Troubleshooting Scenario 4 — Sudo Doesn't Work
+
+As the affected user:
+
+```bash
+sudo -l
+```
+
+As administrator:
+
+```bash
+id developer1
+```
+
+Check wheel:
+
+```bash
+getent group wheel
+```
+
+Check sudo configuration:
+
+```bash
+sudo visudo -c
+```
+
+Expected:
+
+```text
+/etc/sudoers: parsed OK
+```
+
+Also inspect:
+
+```bash
+sudo ls -l /etc/sudoers.d/
+```
+
+---
+
+# 50. Troubleshooting Scenario 5 — Account Suddenly Locked
+
+Check:
+
+```bash
+sudo passwd -S developer1
+```
+
+Then:
+
+```bash
+sudo chage -l developer1
+```
+
+Unlock:
+
+```bash
+sudo passwd -u developer1
+```
+
+Then verify:
+
+```bash
+sudo passwd -S developer1
+```
+
+---
+
+# 51. Troubleshooting Scenario 6 — User's Home Directory Missing
+
+Check:
+
+```bash
+getent passwd developer1
+```
+
+Suppose it shows:
+
+```text
+/home/developer1
+```
+
+Check:
+
+```bash
+ls -ld /home/developer1
+```
+
+If missing, don't blindly create it.
+
+Investigate:
+
+```bash
+sudo ls -ld /home
+```
+
+Then determine whether the account was created incorrectly or the home directory was deleted.
+
+For a lab account, you can recreate it:
+
+```bash
+sudo mkdir /home/developer1
+sudo chown developer1:developer1 /home/developer1
+sudo chmod 700 /home/developer1
+```
+
+---
+
+# 52. User Administration Cheat Sheet
+
+## Create
+
+```bash
+useradd -m username
+```
+
+## Create with shell
+
+```bash
+useradd -m -s /bin/bash username
+```
+
+## Delete
+
+```bash
+userdel username
+```
+
+## Delete + home
+
+```bash
+userdel -r username
+```
+
+## Modify
+
+```bash
+usermod
+```
+
+## Password
+
+```bash
+passwd username
+```
+
+## Lock
+
+```bash
+passwd -l username
+```
+
+## Unlock
+
+```bash
+passwd -u username
+```
+
+## Expiration
+
+```bash
+chage -l username
+```
+
+## Groups
+
+```bash
+groupadd groupname
+```
+
+## Add user to group
+
+```bash
+usermod -aG groupname username
+```
+
+## Remove user from group
+
+```bash
+gpasswd -d username groupname
+```
+
+## Check identity
+
+```bash
+id username
+```
+
+## Check groups
+
+```bash
+groups username
+```
+
+## Query user database
+
+```bash
+getent passwd username
+```
+
+## Query group database
+
+```bash
+getent group groupname
+```
+
+---
+
+# 53. Phase 3 Practical Project
+
+Now we're going to create a realistic company structure.
+
+```text
+Company
+│
+├── Development
+│   ├── developer1
+│   └── developer2
+│
+├── Operations
+│   └── operator1
+│
+├── Database
+│   └── dbadmin
+│
+├── Security
+│   └── securityadmin
+│
+└── Application
+    └── appsvc
+```
+
+Groups:
+
+```text
+developers
+operations
+database
+security
+```
+
+---
+
+# 54. Build the Environment
+
+Run:
+
+```bash
+sudo groupadd developers
+sudo groupadd operations
+sudo groupadd database
+sudo groupadd security
+```
+
+Users:
+
+```bash
+sudo useradd -m -s /bin/bash developer1
+sudo useradd -m -s /bin/bash developer2
+sudo useradd -m -s /bin/bash operator1
+sudo useradd -m -s /bin/bash dbadmin
+sudo useradd -m -s /bin/bash securityadmin
+```
+
+Service account:
+
+```bash
+sudo useradd -r -s /sbin/nologin appsvc
+```
+
+---
+
+# 55. Assign Groups
+
+```bash
+sudo usermod -aG developers developer1
+sudo usermod -aG developers developer2
+sudo usermod -aG operations operator1
+sudo usermod -aG database dbadmin
+sudo usermod -aG security securityadmin
+```
+
+Verify everything:
+
+```bash
+id developer1
+id developer2
+id operator1
+id dbadmin
+id securityadmin
+id appsvc
+```
+
+---
+
+# 56. Create Department Directories
+
+```bash
+sudo mkdir -p /company/{development,operations,database,security,application}
+```
+
+Check:
+
+```bash
+find /company -type d
+```
+
+---
+
+# 57. Assign Group Ownership
+
+```bash
+sudo chown root:developers /company/development
+sudo chown root:operations /company/operations
+sudo chown root:database /company/database
+sudo chown root:security /company/security
+sudo chown root:operations /company/application
+```
+
+Check:
+
+```bash
+ls -ld /company/*
+```
+
+---
+
+# 58. Prepare for Phase 4
+
+We will use these directories for our next phase.
+
+For example:
+
+```text
+/company/development
+       |
+       +---- developers
+
+/company/database
+       |
+       +---- database
+
+/company/security
+       |
+       +---- security
+```
+
+In **Phase 4**, we'll make these permissions meaningful.
+
+---
+
+# 59. Phase 3 Troubleshooting Lab
+
+Perform these deliberately.
+
+### Lab A — Remove group membership
+
+```bash
+sudo gpasswd -d developer1 developers
+```
+
+Check:
+
+```bash
+id developer1
+```
+
+Fix:
+
+```bash
+sudo usermod -aG developers developer1
+```
+
+---
+
+### Lab B — Lock account
+
+```bash
+sudo passwd -l developer2
+```
+
+Check:
+
+```bash
+sudo passwd -S developer2
+```
+
+Fix:
+
+```bash
+sudo passwd -u developer2
+```
+
+---
+
+### Lab C — Disable login shell
+
+```bash
+sudo usermod -s /sbin/nologin operator1
+```
+
+Check:
+
+```bash
+getent passwd operator1
+```
+
+Fix:
+
+```bash
+sudo usermod -s /bin/bash operator1
+```
+
+---
+
+### Lab D — Password expiration
+
+```bash
+sudo chage -d 0 dbadmin
+```
+
+Check:
+
+```bash
+sudo chage -l dbadmin
+```
+
+This simulates an account that must change its password at next login.
+
+---
+
+# 60. Phase 3 Interview Questions
+
+### Q1. Where are Linux users stored?
+
+Primarily:
+
+```text
+/etc/passwd
+```
+
+Password hashes and password aging information are stored in:
+
+```text
+/etc/shadow
+```
+
+### Q2. Where are groups stored?
+
+```text
+/etc/group
+```
+
+### Q3. What is UID?
+
+Unique User ID.
+
+### Q4. What is GID?
+
+Group ID.
+
+### Q5. Difference between primary and secondary group?
+
+A primary group is the user's main group; supplementary groups provide additional group membership.
+
+### Q6. How do you add a user to a group?
+
+```bash
+usermod -aG group user
+```
+
+### Q7. How do you lock an account?
+
+```bash
+passwd -l user
+```
+
+### Q8. How do you unlock it?
+
+```bash
+passwd -u user
+```
+
+### Q9. How do you check password expiration?
+
+```bash
+chage -l user
+```
+
+### Q10. Why use service accounts?
+
+To run applications/services with restricted privileges rather than running them as root.
+
+### Q11. Difference between `su` and `sudo`?
+
+`su` switches to another user; `sudo` executes commands with elevated privileges according to sudo policy.
+
+### Q12. How do you safely edit sudo configuration?
+
+```bash
+visudo
+```
+
+or:
+
+```bash
+visudo -f /etc/sudoers.d/file
+```
+
+### Q13. How do you verify sudo configuration syntax?
+
+```bash
+visudo -c
+```
+
+---
+
+# 61. Phase 3 Completion Checklist
+
+Before moving forward:
+
+```text
+[ ] /etc/passwd understood
+[ ] /etc/shadow understood
+[ ] /etc/group understood
+[ ] UID understood
+[ ] GID understood
+[ ] useradd
+[ ] usermod
+[ ] userdel
+[ ] passwd
+[ ] chage
+[ ] groupadd
+[ ] groupdel
+[ ] groups
+[ ] id
+[ ] getent
+[ ] su
+[ ] sudo
+[ ] Account locking
+[ ] Account unlocking
+[ ] Password expiration
+[ ] Account expiration
+[ ] Service account
+[ ] Login shell
+[ ] Sudoers
+[ ] Least privilege
+[ ] User troubleshooting
+[ ] Group troubleshooting
+[ ] Sudo troubleshooting
+```
+
+## 🔥 Administrator rule to remember
+
+When a user says:
+
+> **"I can't access something."**
+
+Don't immediately run `chmod 777`.
+
+Investigate:
+
+```text
+             User
+               ↓
+          id username
+               ↓
+          Group membership
+               ↓
+       File ownership
+               ↓
+        File permissions
+               ↓
+             ACL
+               ↓
+           SELinux
+               ↓
+          Application
+```
+
+**Never use `chmod 777` as your first troubleshooting solution.** That's a common bad practice and an interview red flag.
+
+---
+
+## Next: Phase 4
+
+**Phase 4 — Linux File Permissions, Ownership & ACLs** will build directly on the `/company` environment we created.
+
+We'll implement:
+
+```text
+/company
+├── development
+├── operations
+├── database
+├── security
+└── application
+```
+
+and enforce real access rules such as:
+
+```text
+developer1 → development       READ/WRITE
+developer1 → database          NO ACCESS
+
+dbadmin    → database           READ/WRITE
+dbadmin    → development        READ ONLY
+
+operator1  → application        READ/WRITE
+developer1 → application        READ ONLY
+
+securityadmin → security        READ/WRITE
+```
+
+Then we'll **intentionally break the permissions** and troubleshoot `Permission denied` using ownership, `chmod`, `chown`, `umask`, ACLs, `namei`, and eventually SELinux.
